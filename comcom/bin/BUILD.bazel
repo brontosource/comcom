@@ -12,6 +12,8 @@ rust_binary(
         "main.rs",
     ],
     deps = [
+        "//comcom/build_system",
+        "//comcom/db",
         "@crates//:clap",
         "@crates//:miette",
     ],

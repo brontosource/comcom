@@ -1,5 +1,12 @@
+use std::path::Path;
 use std::path::PathBuf;
 
+use build_system::cmake::Cmake;
+use build_system::BuildSystem;
+use miette::miette;
+use miette::Result;
+
+use crate::common::current_dir;
 use crate::common::CommonArgs;
 
 #[derive(clap::Args)]
@@ -9,6 +16,38 @@ pub(crate) struct Args {
 
   /// The build directory (default: the one configured for this project).
   pub(crate) build_dir: Option<PathBuf>,
+}
+
+impl Args {
+  pub(crate) fn build_system(&self) -> Result<Box<dyn BuildSystem>> {
+    Ok(Box::new(Cmake {
+      build_dir: self.find_build_dir()?,
+      build_deps: self.common.build_deps,
+    }))
+  }
+
+  fn find_build_dir(&self) -> Result<PathBuf> {
+    let cwd = current_dir()?;
+    self
+      .build_dir
+      .as_ref()
+      .map(|dir| Ok(cwd.join(dir)))
+      .or_else(|| configured_build_dir(&cwd))
+      .or_else(|| configured_build_dir(&cwd.join("build")))
+      .unwrap_or_else(|| {
+        Err(miette!(
+          "Unable to find a configured CMake build directory; pass one."
+        ))
+      })
+  }
+}
+
+/// `dir`, if CMake has configured it.
+fn configured_build_dir(dir: &Path) -> Option<Result<PathBuf>> {
+  dir
+    .join("CMakeCache.txt")
+    .is_file()
+    .then(|| Ok(dir.to_path_buf()))
 }
 
 #[cfg(test)]
