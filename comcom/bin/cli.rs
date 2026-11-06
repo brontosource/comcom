@@ -33,7 +33,7 @@ impl Cli {
   }
 
   pub fn parse_or_exit() -> Cli {
-    // TODO(1): prefer `.into_ok()` over `.unwrap()`. stabilizing on Dec 24, 2026
+    // TODO(6): prefer `.into_ok()` over `.unwrap()`. stabilizing on Dec 24, 2026
     // in v1.101
     Self::parse(std::env::args_os().collect())
       .map_err(|e| e.exit())
