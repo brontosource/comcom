@@ -3,8 +3,6 @@ use miette::Result;
 use serde::Deserialize;
 use serde::Serialize;
 
-pub const EXEC_ROOT_PLACEHOLDER: &str = "__EXEC_ROOT__";
-
 mod entry;
 pub use entry::Entry;
 
@@ -74,6 +72,8 @@ mod tests {
   use std::path::PathBuf;
 
   use super::*;
+
+  const EXEC_ROOT_PLACEHOLDER: &str = "__EXEC_ROOT__";
 
   fn entry(file: &str, out: &str) -> Entry {
     Entry {
