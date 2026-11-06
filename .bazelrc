@@ -1,0 +1,1 @@
+build --macos_minimum_os=26.0 --host_macos_minimum_os=26.0

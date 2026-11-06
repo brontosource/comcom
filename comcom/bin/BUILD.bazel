@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_binary(
+    name = "comcom",
+    srcs = [
+        "bazel.rs",
+        "cli.rs",
+        "cmake.rs",
+        "common.rs",
+        "main.rs",
+    ],
+    deps = [
+        "@crates//:clap",
+        "@crates//:miette",
+    ],
+)
+
+rust_test(
+    name = "comcom_test",
+    crate = ":comcom",
+)
