@@ -1,5 +1,12 @@
 use std::path::PathBuf;
 
+use build_system::bazel::Bazel;
+use build_system::BuildSystem;
+use miette::miette;
+use miette::Result;
+
+use crate::common::find_program;
+use crate::common::program_from_env;
 use crate::common::CommonArgs;
 
 #[derive(clap::Args)]
@@ -16,6 +23,34 @@ pub(crate) struct Args {
   /// Extra arguments for `bazel build`, after `--`.
   #[arg(last = true)]
   pub(crate) bazel_args: Vec<String>,
+}
+
+impl Args {
+  pub(crate) fn build_system(&self) -> Result<Box<dyn BuildSystem>> {
+    let patterns = if self.patterns.is_empty() {
+      vec!["//...".to_string()]
+    } else {
+      self.patterns.clone()
+    };
+
+    Ok(Box::new(Bazel {
+      bazel: self.find_program()?,
+      patterns,
+      build_deps: self.common.build_deps,
+      extra_args: self.bazel_args.clone(),
+    }))
+  }
+
+  fn find_program(&self) -> Result<PathBuf> {
+    self
+      .bazel
+      .clone()
+      .map(|bazel| Ok(bazel))
+      .or_else(|| program_from_env("COMCOM_BAZEL"))
+      .or_else(|| find_program("bazel"))
+      .or_else(|| find_program("bazelisk"))
+      .unwrap_or_else(|| Err(miette!("Unable to find `bazel` implementation.")))
+  }
 }
 
 #[cfg(test)]

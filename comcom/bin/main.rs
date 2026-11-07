@@ -1,6 +1,5 @@
 use std::process::ExitCode;
 
-use miette::miette;
 use miette::Result;
 
 mod bazel;
@@ -22,11 +21,11 @@ fn main() -> ExitCode {
 }
 
 fn run(cmd: &cli::Cmd) -> Result<()> {
-  let name = match cmd {
-    cli::Cmd::Bazel(_) => "bazel",
-    cli::Cmd::Cmake(_) => "cmake",
+  let (build_system, common) = match cmd {
+    cli::Cmd::Bazel(args) => (args.build_system()?, &args.common),
+    cli::Cmd::Cmake(args) => (args.build_system()?, &args.common),
   };
-  Err(miette!("`comcom {name}` is not implemented yet"))
+  common.finish(build_system.generate()?)
 }
 
 fn initialize_miette() {
