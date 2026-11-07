@@ -5,8 +5,9 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "db",
     srcs = [
-        "lib.rs",
         "entry.rs",
+        "lib.rs",
+        "normalize.rs",
     ],
     deps = [
         "@crates//:miette",
@@ -19,4 +20,5 @@ rust_library(
 rust_test(
     name = "db_test",
     crate = ":db",
+    deps = ["@crates//:tempfile"],
 )
