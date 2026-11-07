@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Formats the code. On a PR from a branch in this repo, any fixes are pushed
+  # to the PR as a new commit. On PRs from forks, the job fails if anything
+  # needed formatting.
+  rustfmt:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Check out the PR branch so fixes can be pushed back to it.
+          ref: ${{ github.head_ref || github.ref }}
+      # .rustfmt.toml uses unstable options (group_imports, imports_granularity,
+      # wrap_comments), so this needs a nightly rustfmt.
+      # The runner image ships with rustup, so no third-party action is needed.
+      - name: Install rustfmt
+        run: |
+          rustup toolchain install nightly-2026-10-14 --profile minimal --component rustfmt
+          rustup default nightly-2026-10-14
+      - name: Format
+        run: git ls-files -z '*.rs' | xargs -0 rustfmt
+      - name: Push fixes to the PR
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Apply rustfmt"
+          git push
+      - name: Check formatting
+        run: git diff --exit-code
+
+  test:
+    name: test (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [fastbuild, opt]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: bazel-contrib/setup-bazel@104e3eea9447cdaa4b00d0fb46191a3985d26ab3 # 0.19.1
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ matrix.mode }}
+          repository-cache: true
+      - name: bazel test
+        run: bazel test -c ${{ matrix.mode }} --test_output=errors //...
