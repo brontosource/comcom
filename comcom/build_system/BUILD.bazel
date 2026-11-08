@@ -7,15 +7,18 @@ rust_library(
     srcs = [
         "bazel.rs",
         "cmake/cache.rs",
-        "cmake/generator/mod.rs",
-        "cmake/generator/ninja.rs",
         "cmake/mod.rs",
         "cmake/parse.rs",
+        "cmake/generator/mod.rs",
+        "cmake/generator/ninja.rs",
         "lib.rs",
     ],
     deps = [
+        "//comcom/common/semver",
         "//comcom/db",
+        "//comcom/output",
         "@crates//:miette",
+        "@crates//:shlex",
     ],
 )
 
