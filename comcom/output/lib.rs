@@ -39,7 +39,9 @@ pub fn is_up_to_date(path: &Path, contents: &str) -> Result<bool> {
 }
 
 /// Atomically writes `contents` to `path`, leaving the file untouched if the
-/// bytes already match.
+/// contents already match. Specifically, if `path` is a symlink and the
+/// contents match, the symlink is kept intact. If the contents changed, the
+/// symlink is replaced with a regular file.
 pub fn write_if_changed(path: &Path, contents: &str) -> Result<WriteOutcome> {
   let parent = match path.parent() {
     Some(p) if !p.as_os_str().is_empty() => p,
@@ -51,11 +53,15 @@ pub fn write_if_changed(path: &Path, contents: &str) -> Result<WriteOutcome> {
   if is_up_to_date(path, contents)? {
     return Ok(WriteOutcome::Unchanged);
   }
-  let mut tmp = new_temp_file(parent).into_diagnostic().with_context(|| {
+  let mut tmp = new_temp_file(path).into_diagnostic().with_context(|| {
     format!("Failed to create temp file in {}", parent.display())
   })?;
-  // Keep the mode of the file being replaced.
-  if let Ok(meta) = std::fs::metadata(path) {
+  // Keep the mode of the regular file being replaced. A symlink is replaced
+  // by a new file, so it gets the default mode rather than the target's.
+  if let Some(meta) = std::fs::symlink_metadata(path)
+    .ok()
+    .filter(|m| m.file_type().is_file())
+  {
     tmp
       .as_file()
       .set_permissions(meta.permissions())
@@ -78,10 +84,22 @@ pub fn write_if_changed(path: &Path, contents: &str) -> Result<WriteOutcome> {
   Ok(WriteOutcome::Written)
 }
 
-/// A temp file in `dir` with the mode a newly created file would get: on Unix,
-/// 0666 minus the umask (applied by the kernel), not tempfile's default 0600.
-fn new_temp_file(dir: &Path) -> std::io::Result<tempfile::NamedTempFile> {
+/// A temp file next to `path`, to be renamed over it. It is named
+/// `.<file name>.<random>` so a leftover from an interrupted write shows where
+/// it came from. It has the mode a newly created file would get: on Unix, 0666
+/// minus the umask (applied by the kernel), not tempfile's default 0600.
+fn new_temp_file(path: &Path) -> std::io::Result<tempfile::NamedTempFile> {
+  let dir = match path.parent() {
+    Some(p) if !p.as_os_str().is_empty() => p,
+    _ => Path::new("."),
+  };
+  let mut prefix = std::ffi::OsString::from(".");
+  if let Some(name) = path.file_name() {
+    prefix.push(name);
+    prefix.push(".");
+  }
   let mut builder = tempfile::Builder::new();
+  builder.prefix(&prefix);
   #[cfg(unix)]
   {
     use std::os::unix::fs::PermissionsExt;
@@ -185,5 +203,87 @@ mod tests {
     std::fs::write(&p, "x").unwrap();
     assert!(is_up_to_date(&p, "x").unwrap());
     assert!(!is_up_to_date(&p, "y").unwrap());
+  }
+
+  #[cfg(unix)]
+  fn is_symlink(p: &Path) -> bool {
+    std::fs::symlink_metadata(p)
+      .unwrap()
+      .file_type()
+      .is_symlink()
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn up_to_date_follows_symlink() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("target.json");
+    std::fs::write(&target, "x").unwrap();
+    let p = dir.path().join("out.json");
+    std::os::unix::fs::symlink(&target, &p).unwrap();
+    assert!(is_up_to_date(&p, "x").unwrap());
+    assert!(!is_up_to_date(&p, "y").unwrap());
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn up_to_date_false_for_dangling_symlink() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("out.json");
+    std::os::unix::fs::symlink(dir.path().join("missing"), &p).unwrap();
+    assert!(!is_up_to_date(&p, "x").unwrap());
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn keeps_symlink_to_identical_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("target.json");
+    std::fs::write(&target, "x").unwrap();
+    let p = dir.path().join("out.json");
+    std::os::unix::fs::symlink(&target, &p).unwrap();
+
+    assert_eq!(write_if_changed(&p, "x").unwrap(), WriteOutcome::Unchanged);
+    assert!(is_symlink(&p));
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "x");
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn replaces_dangling_symlink() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("missing");
+    let p = dir.path().join("out.json");
+    std::os::unix::fs::symlink(&missing, &p).unwrap();
+
+    assert_eq!(write_if_changed(&p, "x").unwrap(), WriteOutcome::Written);
+    assert!(!is_symlink(&p));
+    assert_eq!(std::fs::read_to_string(&p).unwrap(), "x");
+    assert!(!missing.exists());
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn replaces_symlink_with_different_contents() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("target.json");
+    std::fs::write(&target, "x").unwrap();
+    let p = dir.path().join("out.json");
+    std::os::unix::fs::symlink(&target, &p).unwrap();
+
+    assert_eq!(write_if_changed(&p, "y").unwrap(), WriteOutcome::Written);
+    let meta = std::fs::symlink_metadata(&p).unwrap();
+    assert!(meta.file_type().is_file(), "{p:?} is still a symlink");
+    assert_eq!(std::fs::read_to_string(&p).unwrap(), "y");
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "x");
+  }
+
+  #[test]
+  fn temp_file_named_after_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let tmp = new_temp_file(&dir.path().join("out.json")).unwrap();
+    assert_eq!(tmp.path().parent(), Some(dir.path()));
+    let name = tmp.path().file_name().unwrap().to_str().unwrap();
+    assert!(name.starts_with(".out.json."), "{name}");
   }
 }

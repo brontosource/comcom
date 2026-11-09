@@ -67,20 +67,20 @@ impl CommonArgs {
     let path = self.output_path()?;
     let shown = path.display();
 
-    if path
+    let was_symlink = path
       .symlink_metadata()
-      .is_ok_and(|m| m.file_type().is_symlink())
-    {
-      // Replace the link rather than write through it.
-      warn(&format!("replacing symlink {shown} with a regular file"));
-      std::fs::remove_file(&path)
-        .into_diagnostic()
-        .with_context(|| format!("failed to remove {shown}"))?;
-    }
+      .is_ok_and(|m| m.file_type().is_symlink());
 
     let contents = db.render()?;
     let message = match write_if_changed(&path, &contents)? {
-      WriteOutcome::Written => format!("wrote {} entries to {shown}", db.len()),
+      WriteOutcome::Written => {
+        if was_symlink {
+          // `write_if_changed` renames a temp file over `path`, which replaces
+          // the link itself rather than writing through it.
+          warn(&format!("Replaced symlink {shown} with a regular file"));
+        }
+        format!("Wrote {} entries to {shown}", db.len())
+      }
       WriteOutcome::Unchanged => {
         format!("{shown} unchanged ({} entries)", db.len())
       }
