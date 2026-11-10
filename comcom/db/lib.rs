@@ -3,15 +3,36 @@ use std::path::Path;
 use miette::Context;
 use miette::IntoDiagnostic;
 use miette::Result;
-use serde::Deserialize;
 use serde::Serialize;
 
 mod entry;
 pub use entry::Entry;
 use entry::RawEntry;
 
-/// The entries of one compile_commands.json file or fragment.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+mod normalize;
+
+/// Parses the entries of a compile_commands.json file or fragment, exactly as
+/// written. [`Db::normalize`] turns them into a [`Db`].
+fn parse_entries(json: &str) -> Result<Vec<Entry>> {
+  let raw: Vec<RawEntry> = serde_json::from_str(json).into_diagnostic()?;
+  raw.into_iter().map(Entry::try_from).collect()
+}
+
+/// Reads and parses the compile_commands.json file at `path` (see
+/// [`parse_entries`]).
+fn read_entries(path: &Path) -> Result<Vec<Entry>> {
+  let text = std::fs::read_to_string(path)
+    .into_diagnostic()
+    .with_context(|| format!("While reading {}", path.display()))?;
+  parse_entries(&text)
+    .with_context(|| format!("While parsing {}", path.display()))
+}
+
+/// A normalized compilation database: response files are expanded and the
+/// entries are sorted, without exact duplicates. Every way to make one
+/// ([`Db::normalize`], [`Db::normalize_with`], [`Db::read_from`] and
+/// [`Db::merge`]) keeps it normalized.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct Db(Vec<Entry>);
 
@@ -20,23 +41,9 @@ impl Db {
     Db::default()
   }
 
-  /// Reads the compile_commands.json file at `path`.
+  /// Reads the compile_commands.json file at `path` and normalizes it.
   pub fn read_from(path: &Path) -> Result<Db> {
-    let text = std::fs::read_to_string(path)
-      .into_diagnostic()
-      .with_context(|| format!("While reading {}", path.display()))?;
-    Self::from_json_str(&text)
-      .with_context(|| format!("While parsing {}", path.display()))
-  }
-
-  pub fn from_json_str(json: &str) -> miette::Result<Db> {
-    let raw: Vec<RawEntry> = serde_json::from_str(json).into_diagnostic()?;
-    Ok(Db(
-      raw
-        .into_iter()
-        .map(Entry::try_from)
-        .collect::<Result<Vec<_>>>()?,
-    ))
+    Db::normalize(read_entries(path)?)
   }
 
   pub fn entries(&self) -> &[Entry] {
@@ -80,12 +87,6 @@ impl Db {
   }
 }
 
-impl<I: IntoIterator<Item = Entry>> From<I> for Db {
-  fn from(entries: I) -> Db {
-    Db(entries.into_iter().collect())
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use std::path::Path;
@@ -105,12 +106,13 @@ mod tests {
   }
 
   fn parse(json: &str) -> miette::Result<Vec<Entry>> {
-    Db::from_json_str(json).map(Db::into_entries)
+    parse_entries(json)
   }
 
   fn db(entries: &[Entry]) -> Db {
-    entries.to_vec().into()
+    Db::normalize(entries.to_vec()).unwrap()
   }
+
   #[test]
   fn parse_reads_aspect_fragment() {
     let v = parse(r#"[{"directory":"__EXEC_ROOT__","file":"a.cc","arguments":["cc","-c","a.cc"],"output":"a.o"}]"#).unwrap();
@@ -157,7 +159,7 @@ mod tests {
   fn render_round_trips() {
     let mut x = entry("a.cc", "a.o");
     x.arguments.push(r#"-DGREETING="hello world""#.into());
-    let s = Db::from([x.clone()]).render().unwrap();
+    let s = db(&[x.clone()]).render().unwrap();
     assert!(s.ends_with('\n'));
     assert_eq!(parse(&s).unwrap(), vec![x]);
   }
