@@ -49,6 +49,9 @@ fn expand_params(args: Vec<String>, base: &Path) -> Result<Vec<String>> {
           .with_context(|| {
             format!("Reading parameter file {}", path.display())
           })?;
+        // NOTE:
+        // clangd treats single/double quotes in response files equivalently,
+        // whereas shlex (and clang itself) treat them differently.
         let parts = shlex::split(&contents).ok_or_else(|| {
           miette!("Cannot parse parameter file {}", path.display())
         })?;
