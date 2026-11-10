@@ -64,7 +64,10 @@ impl Ninja {
   /// builds Ninja's defaults.
   fn build_chunk(&self, build_dir: &Path, targets: &[String]) -> Result<()> {
     run_build(
-      Command::new(&self.ninja).arg("-C").arg(build_dir).args(targets),
+      Command::new(&self.ninja)
+        .arg("-C")
+        .arg(build_dir)
+        .args(targets),
       "Ninja",
     )
   }
