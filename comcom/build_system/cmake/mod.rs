@@ -6,6 +6,11 @@ use miette::Result;
 
 use crate::BuildSystem;
 
+mod cache;
+pub use cache::Cache;
+
+mod parse;
+
 pub struct Cmake {
   pub build_dir: PathBuf,
   pub build_deps: bool,
