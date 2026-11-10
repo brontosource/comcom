@@ -1,3 +1,6 @@
+use std::path::Path;
+
+use miette::Context;
 use miette::IntoDiagnostic;
 use miette::Result;
 use serde::Deserialize;
@@ -5,6 +8,7 @@ use serde::Serialize;
 
 mod entry;
 pub use entry::Entry;
+use entry::RawEntry;
 
 /// The entries of one compile_commands.json file or fragment.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -16,8 +20,23 @@ impl Db {
     Db::default()
   }
 
+  /// Reads the compile_commands.json file at `path`.
+  pub fn read_from(path: &Path) -> Result<Db> {
+    let text = std::fs::read_to_string(path)
+      .into_diagnostic()
+      .with_context(|| format!("While reading {}", path.display()))?;
+    Self::from_json_str(&text)
+      .with_context(|| format!("While parsing {}", path.display()))
+  }
+
   pub fn from_json_str(json: &str) -> miette::Result<Db> {
-    serde_json::from_str(json).into_diagnostic()
+    let raw: Vec<RawEntry> = serde_json::from_str(json).into_diagnostic()?;
+    Ok(Db(
+      raw
+        .into_iter()
+        .map(Entry::try_from)
+        .collect::<Result<Vec<_>>>()?,
+    ))
   }
 
   pub fn entries(&self) -> &[Entry] {
@@ -69,6 +88,7 @@ impl<I: IntoIterator<Item = Entry>> From<I> for Db {
 
 #[cfg(test)]
 mod tests {
+  use std::path::Path;
   use std::path::PathBuf;
 
   use super::*;
@@ -140,5 +160,50 @@ mod tests {
     let s = Db::from([x.clone()]).render().unwrap();
     assert!(s.ends_with('\n'));
     assert_eq!(parse(&s).unwrap(), vec![x]);
+  }
+
+  #[test]
+  fn command_is_split() {
+    let e = parse(r#"[{"directory":"/b","file":"a.cc","output":"a.o",
+            "command":"/usr/bin/c++ '-DG=\"hello world\"' -I\"/p q/inc\" -c a.cc"}]"#).unwrap();
+    assert_eq!(
+      e[0].arguments,
+      ["/usr/bin/c++", "-DG=\"hello world\"", "-I/p q/inc", "-c", "a.cc"]
+    );
+  }
+  #[test]
+  fn arguments_form_kept() {
+    let e = parse(
+      r#"[{"directory":"/b","file":"a.cc","arguments":["cc","-c","a.cc"]}]"#,
+    )
+    .unwrap();
+    assert_eq!(e[0].arguments, ["cc", "-c", "a.cc"]);
+  }
+  #[test]
+  fn arguments_win_over_command() {
+    let e = parse(r#"[{"directory":"/b","file":"a.cc","arguments":["cc"],"command":"other -c a.cc"}]"#).unwrap();
+    assert_eq!(e[0].arguments, ["cc"]);
+  }
+  #[test]
+  fn missing_output_stays_missing() {
+    let e = parse(r#"[{"directory":"/b","file":"a.cc","arguments":["cc"]}]"#)
+      .unwrap();
+    assert_eq!(e[0].output, None);
+  }
+  #[test]
+  fn output_kept_exactly() {
+    let e = parse(r#"[{"directory":"/b","file":"a.cc","output":"x/../a.o","arguments":["cc"]}]"#).unwrap();
+    assert_eq!(e[0].output.as_deref(), Some(Path::new("x/../a.o")));
+  }
+  #[test]
+  fn neither_command_nor_arguments_errors() {
+    assert!(parse(r#"[{"directory":"/b","file":"a.cc"}]"#).is_err());
+  }
+  #[test]
+  fn unsplittable_command_errors() {
+    assert!(parse(
+      r#"[{"directory":"/b","file":"a.cc","command":"cc \"oops"}]"#
+    )
+    .is_err());
   }
 }
