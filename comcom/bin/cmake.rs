@@ -20,10 +20,7 @@ pub(crate) struct Args {
 
 impl Args {
   pub(crate) fn build_system(&self) -> Result<Box<dyn BuildSystem>> {
-    Ok(Box::new(Cmake {
-      build_dir: self.find_build_dir()?,
-      build_deps: self.common.build_deps,
-    }))
+    Ok(Box::new(Cmake::new(self.find_build_dir()?, self.common.build_deps)?))
   }
 
   fn find_build_dir(&self) -> Result<PathBuf> {
