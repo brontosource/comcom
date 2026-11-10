@@ -9,6 +9,7 @@ rust_library(
         "cmake/cache.rs",
         "cmake/mod.rs",
         "cmake/parse.rs",
+        "cmake/generator/make.rs",
         "cmake/generator/mod.rs",
         "cmake/generator/ninja.rs",
         "lib.rs",

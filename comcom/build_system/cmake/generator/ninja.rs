@@ -13,6 +13,7 @@ use output::advise;
 use output::warn;
 use semver::SemVer;
 
+use crate::cmake::generator::run_build;
 use crate::cmake::generator::Generator;
 
 /// The `Ninja` generator. Holds the `ninja` program CMake configured.
@@ -62,23 +63,13 @@ impl Ninja {
   /// comcom's stderr, so comcom's own stdout stays empty. With no targets this
   /// builds Ninja's defaults.
   fn build_chunk(&self, build_dir: &Path, targets: &[String]) -> Result<()> {
-    let status = Command::new(&self.ninja)
-      .arg("-C")
-      .arg(build_dir)
-      .args(targets)
-      .stdin(Stdio::null())
-      .stdout(std::io::stderr())
-      .status()
-      .into_diagnostic()
-      .with_context(|| format!("Failed to run {}", self.ninja.display()))?;
-    if !status.success() {
-      let why = match status.code() {
-        Some(n) => format!("exit {n}"),
-        None => "terminated by signal".to_string(),
-      };
-      bail!("Ninja build failed ({why})");
-    }
-    Ok(())
+    run_build(
+      Command::new(&self.ninja)
+        .arg("-C")
+        .arg(build_dir)
+        .args(targets),
+      "Ninja",
+    )
   }
 
   fn version(&self) -> Result<SemVer> {
