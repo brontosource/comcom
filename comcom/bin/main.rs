@@ -11,7 +11,7 @@ fn main() -> ExitCode {
   initialize_miette();
   let cli = cli::Cli::parse_or_exit();
 
-  match run(&cli.cmd) {
+  match run(cli) {
     Ok(()) => ExitCode::SUCCESS,
     Err(e) => {
       eprintln!("{e:?}");
@@ -20,8 +20,12 @@ fn main() -> ExitCode {
   }
 }
 
-fn run(cmd: &cli::Cmd) -> Result<()> {
-  let (build_system, common) = match cmd {
+fn run(cli: cli::Cli) -> Result<()> {
+  let cmd = match cli.cmd {
+    Some(cmd) => cmd,
+    None => cli::Cmd::detect(&common::current_dir()?, cli.common)?,
+  };
+  let (build_system, common) = match &cmd {
     cli::Cmd::Bazel(args) => (args.build_system()?, &args.common),
     cli::Cmd::Cmake(args) => (args.build_system()?, &args.common),
   };

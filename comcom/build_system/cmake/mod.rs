@@ -1,6 +1,7 @@
 //! The CMake backend: lets CMake refresh the `compile_commands.json` it writes
 //! in a configured build directory, then normalizes it. Anything that depends
 //! on the CMake generator is done by its [`generator::Generator`].
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
@@ -29,6 +30,10 @@ pub struct Cmake {
 }
 
 impl BuildSystem for Cmake {
+  fn exists_in(root: &Path) -> bool {
+    root.join("CMakeLists.txt").is_file()
+  }
+
   fn generate(&self) -> Result<Db> {
     let generator = generator::from_cache(&self.cache)?;
     generator.refresh(&self.build_dir)?;
@@ -115,5 +120,28 @@ impl Cmake {
       );
     }
     Ok(cmake)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::fs;
+
+  use super::*;
+
+  #[test]
+  fn exists_with_top_level_lists_file() {
+    let t = tempfile::tempdir().unwrap();
+    assert!(!Cmake::exists_in(t.path()));
+    fs::write(t.path().join("CMakeLists.txt"), "").unwrap();
+    assert!(Cmake::exists_in(t.path()));
+  }
+
+  #[test]
+  fn nested_lists_file_does_not_count() {
+    let t = tempfile::tempdir().unwrap();
+    fs::create_dir(t.path().join("sub")).unwrap();
+    fs::write(t.path().join("sub/CMakeLists.txt"), "").unwrap();
+    assert!(!Cmake::exists_in(t.path()));
   }
 }

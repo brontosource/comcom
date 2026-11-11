@@ -26,6 +26,16 @@ pub(crate) struct Args {
 }
 
 impl Args {
+  /// The arguments of a bare `comcom bazel`, with `common` flags.
+  pub(crate) fn with_defaults(common: CommonArgs) -> Args {
+    Args {
+      common,
+      patterns: Vec::new(),
+      bazel: None,
+      bazel_args: Vec::new(),
+    }
+  }
+
   pub(crate) fn build_system(&self) -> Result<Box<dyn BuildSystem>> {
     let patterns = if self.patterns.is_empty() {
       vec!["//...".to_string()]
@@ -63,7 +73,7 @@ mod tests {
 
   fn parse(args: &[&str]) -> Args {
     match Cli::try_parse(args).unwrap_or_else(|e| panic!("{args:?}: {e}")) {
-      Cli { cmd: Cmd::Bazel(a) } => a,
+      Cli { cmd: Some(Cmd::Bazel(a)), .. } => a,
       _ => panic!("not bazel"),
     }
   }
