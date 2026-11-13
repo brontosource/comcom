@@ -12,6 +12,7 @@ rust_library(
         "cmake/generator/make.rs",
         "cmake/generator/mod.rs",
         "cmake/generator/ninja.rs",
+        "exit.rs",
         "lib.rs",
     ],
     deps = [
