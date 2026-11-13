@@ -56,35 +56,38 @@ impl Make {
 
 #[cfg(test)]
 mod tests {
-  use std::os::unix::fs::PermissionsExt;
-
   use super::*;
 
-  /// A fake `make` in a temporary directory that records its arguments, one
-  /// per line, in `args` beside it and then exits with `code`.
+  /// The `Make` for the fake `make` script `name` in testdata. The scripts
+  /// are checked in rather than written by the tests: running a script this
+  /// process just wrote can fail with "Text file busy" when another test
+  /// thread starts a process meanwhile, since that process briefly inherits
+  /// the open file.
+  fn fake(name: &str) -> Make {
+    Make::new(
+      std::env::current_dir()
+        .unwrap()
+        .join("comcom/build_system/cmake/generator/testdata")
+        .join(name),
+    )
+  }
+
+  /// A build directory for `fake_make.sh`, which records its arguments there.
   struct FakeMake {
     dir: tempfile::TempDir,
   }
 
   impl FakeMake {
-    fn new(code: i32) -> FakeMake {
-      let dir = tempfile::tempdir().unwrap();
-      let script = dir.path().join("make");
-      std::fs::write(
-        &script,
-        format!(
-          "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/args\"\n\
-           exit {code}\n"
-        ),
-      )
-      .unwrap();
-      std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
-        .unwrap();
-      FakeMake { dir }
+    fn new() -> FakeMake {
+      FakeMake { dir: tempfile::tempdir().unwrap() }
     }
 
     fn make(&self) -> Make {
-      Make::new(self.dir.path().join("make"))
+      fake("fake_make.sh")
+    }
+
+    fn build_dir(&self) -> &Path {
+      self.dir.path()
     }
 
     /// The arguments of the last run.
@@ -104,35 +107,38 @@ mod tests {
 
   #[test]
   fn refresh_runs_cmake_check_build_system() {
-    let fake = FakeMake::new(0);
-    fake.make().refresh(Path::new("/some/build")).unwrap();
-    assert_eq!(
-      fake.args(),
-      ["-C", "/some/build", &jobs(), "cmake_check_build_system"]
-    );
+    let fake = FakeMake::new();
+    fake.make().refresh(fake.build_dir()).unwrap();
+    let dir = fake.build_dir().display().to_string();
+    assert_eq!(fake.args(), ["-C", &dir, &jobs(), "cmake_check_build_system"]);
   }
 
   #[test]
   fn build_generated_inputs_builds_everything() {
-    let fake = FakeMake::new(0);
+    let fake = FakeMake::new();
     fake
       .make()
-      .build_generated_inputs(Path::new("/some/build"), &Db::new())
+      .build_generated_inputs(fake.build_dir(), &Db::new())
       .unwrap();
-    assert_eq!(fake.args(), ["-C", "/some/build", &jobs()]);
+    let dir = fake.build_dir().display().to_string();
+    assert_eq!(fake.args(), ["-C", &dir, &jobs()]);
   }
 
   #[test]
   fn build_dir_with_spaces_is_one_argument() {
-    let fake = FakeMake::new(0);
-    fake.make().refresh(Path::new("/my project/build")).unwrap();
-    assert_eq!(fake.args()[..2], ["-C", "/my project/build"]);
+    let fake = FakeMake::new();
+    let build = fake.build_dir().join("my build");
+    std::fs::create_dir(&build).unwrap();
+    fake.make().refresh(&build).unwrap();
+    let args = std::fs::read_to_string(build.join("args")).unwrap();
+    let args: Vec<&str> = args.lines().collect();
+    assert_eq!(args[..2], ["-C", &build.display().to_string()]);
   }
 
   #[test]
   fn failing_make_is_an_error() {
-    let fake = FakeMake::new(2);
-    let err = fake.make().refresh(Path::new("/some/build")).unwrap_err();
+    let dir = tempfile::tempdir().unwrap();
+    let err = fake("failing_make.sh").refresh(dir.path()).unwrap_err();
     assert_eq!(err.to_string(), "Make build failed (Exit 2)");
   }
 
