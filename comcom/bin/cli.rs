@@ -12,6 +12,7 @@ use miette::Result;
 use crate::bazel;
 use crate::cmake;
 use crate::common::CommonArgs;
+use crate::make;
 
 /// Produces compile_commands.json for a build. Without a subcommand, attempts
 /// to detect the build system.
@@ -32,6 +33,9 @@ pub(crate) enum Cmd {
   Bazel(bazel::Args),
   /// Snapshot the compile commands of a configured CMake build directory.
   Cmake(cmake::Args),
+  /// Run a `make` build and snapshot the compile commands it runs (Linux
+  /// only).
+  Make(make::Args),
 }
 
 /// A build system `comcom` can detect: its subcommand name, whether a
