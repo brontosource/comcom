@@ -57,25 +57,7 @@ fn run_build(cmd: &mut Command, tool: &str) -> Result<()> {
       format!("Failed to run {}", Path::new(cmd.get_program()).display())
     })?;
   if !status.success() {
-    let why = match status.code() {
-      Some(n) => format!("Exit {n}"),
-      None => {
-        #[cfg(unix)]
-        {
-          use std::os::unix::process::ExitStatusExt;
-          if let Some(signal) = status.signal() {
-            format!("Terminated by signal {signal}")
-          } else {
-            "Terminated by signal".to_string()
-          }
-        }
-        #[cfg(not(unix))]
-        {
-          "Terminated by signal".to_string()
-        }
-      }
-    };
-    bail!("{tool} build failed ({why})");
+    bail!("{tool} build failed ({})", crate::exit::describe(status));
   }
   Ok(())
 }

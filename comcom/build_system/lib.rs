@@ -4,6 +4,7 @@ use db::Db;
 
 pub mod bazel;
 pub mod cmake;
+mod exit;
 
 pub trait BuildSystem {
   /// Whether `root` is the top of a project that uses this build system.
