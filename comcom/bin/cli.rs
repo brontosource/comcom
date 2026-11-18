@@ -13,6 +13,7 @@ use crate::bazel;
 use crate::cmake;
 use crate::common::CommonArgs;
 use crate::make;
+use crate::trace;
 
 /// Produces compile_commands.json for a build. Without a subcommand, attempts
 /// to detect the build system.
@@ -36,6 +37,12 @@ pub(crate) enum Cmd {
   /// Run a `make` build and snapshot the compile commands it runs (Linux
   /// only).
   Make(make::Args),
+  /// Run a build command and snapshot the compile commands it runs (Linux
+  /// only). Replaces the output, backing up an existing one as `<output>.bak`.
+  /// Note that tracing will only find the compile commands that actually run
+  /// so you must use this command with a complete rebuild to ensure all
+  /// commands are captured.
+  Trace(trace::Args),
 }
 
 /// A build system `comcom` can detect: its subcommand name, whether a
