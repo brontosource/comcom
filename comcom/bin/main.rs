@@ -6,6 +6,7 @@ mod bazel;
 mod cli;
 mod cmake;
 mod common;
+mod make;
 
 fn main() -> ExitCode {
   initialize_miette();
@@ -28,6 +29,7 @@ fn run(cli: cli::Cli) -> Result<()> {
   let (build_system, common) = match &cmd {
     cli::Cmd::Bazel(args) => (args.build_system()?, &args.common),
     cli::Cmd::Cmake(args) => (args.build_system()?, &args.common),
+    cli::Cmd::Make(args) => (args.build_system()?, &args.common),
   };
   common.finish(build_system.generate()?)
 }
