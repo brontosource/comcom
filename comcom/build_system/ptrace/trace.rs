@@ -44,8 +44,8 @@ pub fn run(mut cmd: Command) -> Result<Traced> {
     if e.raw_os_error() == Some(libc::EPERM) {
       miette!(
         help = "Tracing may be turned off: see \
-                /proc/sys/kernel/yama/ptrace_scope (0 or 1 allows it), or \
-                the container's seccomp profile",
+                 /proc/sys/kernel/yama/ptrace_scope (0 or 1 allows it), or \
+                 the container's seccomp profile",
         "Cannot trace {}: {e}",
         program.display()
       )
@@ -376,8 +376,8 @@ mod tests {
     let done = dir.path().join("done");
     sh(&format!(
       "for i in $(seq 20); do \
-         ( /bin/sleep 0.2; echo $i >> '{}' ) </dev/null >/dev/null 2>&1 & \
-       done",
+          ( /bin/sleep 0.2; echo $i >> '{}' ) </dev/null >/dev/null 2>&1 & \
+        done",
       done.display()
     ));
     let finished =

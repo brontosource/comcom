@@ -1,7 +1,5 @@
-//! The plain `make` backend. On Linux it runs the build under `ptrace`, which
-//! sees every program the build starts, and records the compiles among them.
-//! Elsewhere it is unsupported: on macOS, System Integrity Protection keeps
-//! an unprivileged program from seeing everything a build runs.
+//! The plain `make` backend. On Linux it runs the build under `ptrace` (see
+//! [`crate::ptrace`]); elsewhere it is unsupported.
 
 use std::path::Path;
 use std::path::PathBuf;
@@ -9,19 +7,9 @@ use std::path::PathBuf;
 use db::Db;
 use miette::Result;
 
+#[cfg(target_os = "linux")]
+use crate::ptrace::warnings::Warnings;
 use crate::BuildSystem;
-
-// Only tracing is Linux-specific; the rest is tested everywhere.
-#[cfg(any(target_os = "linux", test))]
-mod classify;
-#[cfg(target_os = "linux")]
-mod pid;
-#[cfg(target_os = "linux")]
-mod trace;
-#[cfg(any(target_os = "linux", test))]
-mod warnings;
-#[cfg(target_os = "linux")]
-use warnings::Warnings;
 
 pub struct Make {
   /// The `make` program.
@@ -64,8 +52,6 @@ impl Make {
     use std::process::Command;
     use std::process::Stdio;
 
-    use miette::bail;
-
     let mut cmd = Command::new(&self.make);
     // Make only runs the compiles of targets that are out of date, so all of
     // them are rebuilt.
@@ -75,22 +61,7 @@ impl Make {
       .stdin(Stdio::null())
       // Keeps comcom's own stdout empty.
       .stdout(std::io::stderr());
-    let traced = trace::run(cmd)?;
-    if !traced.status.success() {
-      bail!("Make build failed ({})", crate::exit::describe(traced.status));
-    }
-
-    let mut warnings = traced.problems;
-    for argv in &traced.still_running {
-      warnings.push(format!(
-        "`{}` was still running when make finished, so anything it compiles \
-         later is not recorded",
-        argv.join(" ")
-      ));
-    }
-    let analysis = classify::analyze(&traced.execs);
-    warnings.extend(analysis.warnings);
-    Ok((Db::normalize(analysis.entries)?, warnings))
+    crate::ptrace::snapshot(cmd, "Make build")
   }
 }
 
