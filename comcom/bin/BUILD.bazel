@@ -10,6 +10,7 @@ rust_binary(
         "cmake.rs",
         "common.rs",
         "main.rs",
+        "make.rs",
     ],
     deps = [
         "//comcom/build_system",
