@@ -89,18 +89,19 @@ impl Pid {
 
   /// The process id in the message of the event this process stopped at: a
   /// new process's id, or the former id of a thread that started a program.
-  pub fn event_pid(self) -> Pid {
+  /// `None` if this process is no longer stopped there (e.g. it was killed).
+  pub fn event_pid(self) -> Option<Pid> {
     let mut message: libc::c_ulong = 0;
     // SAFETY: PTRACE_GETEVENTMSG writes one c_ulong to `message`.
-    unsafe {
+    let r = unsafe {
       libc::ptrace(
         libc::PTRACE_GETEVENTMSG,
         self.0,
         ptr::null_mut::<c_void>(),
         &mut message as *mut libc::c_ulong as *mut c_void,
-      );
-    }
-    Pid(message as pid_t)
+      )
+    };
+    (r != -1).then_some(Pid(message as pid_t))
   }
 
   /// Whether this process, stopped by `signal`, is stopping itself rather

@@ -153,20 +153,22 @@ impl Tracer {
       libc::PTRACE_EVENT_FORK
       | libc::PTRACE_EVENT_VFORK
       | libc::PTRACE_EVENT_CLONE => {
-        let new = pid.event_pid();
-        let program = self.current[&pid];
-        // The new process may have been seen (and adopted) first.
-        self.current.entry(new).or_insert(program);
-        if let Some(s) = stopping.as_deref_mut() {
-          s.insert(new);
+        // Without the new id (the parent was killed), the new process is
+        // adopted when it is first seen.
+        if let Some(new) = pid.event_pid() {
+          let program = self.current[&pid];
+          // The new process may have been seen (and adopted) first.
+          self.current.entry(new).or_insert(program);
+          if let Some(s) = stopping.as_deref_mut() {
+            s.insert(new);
+          }
         }
         pid.resume();
       }
       libc::PTRACE_EVENT_EXEC => {
         // A thread other than the main one that starts a program takes over
         // the main thread's id.
-        let former = pid.event_pid();
-        if former != pid {
+        if let Some(former) = pid.event_pid().filter(|&former| former != pid) {
           if let Some(program) = self.current.remove(&former) {
             self.current.insert(pid, program);
           }
