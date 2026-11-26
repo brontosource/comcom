@@ -11,6 +11,7 @@ rust_binary(
         "common.rs",
         "main.rs",
         "make.rs",
+        "trace.rs",
     ],
     deps = [
         "//comcom/build_system",

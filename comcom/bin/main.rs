@@ -7,6 +7,7 @@ mod cli;
 mod cmake;
 mod common;
 mod make;
+mod trace;
 
 fn main() -> ExitCode {
   initialize_miette();
@@ -30,6 +31,17 @@ fn run(cli: cli::Cli) -> Result<()> {
     cli::Cmd::Bazel(args) => (args.build_system()?, &args.common),
     cli::Cmd::Cmake(args) => (args.build_system()?, &args.common),
     cli::Cmd::Make(args) => (args.build_system()?, &args.common),
+    cli::Cmd::Trace(args) => {
+      // Traced builds record only the compilations that were run. If a build
+      // system doesn't run a compilation because it was already cached, we may
+      // miss pre-existing compilations. As such, we don't want to delete
+      // an existing output file. Doing so with a caching build system would
+      // mean that runing `comcom` twice would result in an empty
+      // `compile_commands.json` file.
+      return args
+        .common
+        .finish_with_backup(args.build_system()?.generate()?);
+    }
   };
   common.finish(build_system.generate()?)
 }
