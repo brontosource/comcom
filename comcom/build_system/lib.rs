@@ -4,6 +4,7 @@ use db::Db;
 
 pub mod bazel;
 pub mod cmake;
+pub mod custom;
 mod exit;
 pub mod make;
 mod ptrace;
